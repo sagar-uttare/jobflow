@@ -1,0 +1,1 @@
+import './style.css';export const metadata={title:'Job Channel Bot',description:'Job posting control room'};export default function Layout({children}:{children:React.ReactNode}){return <html lang="en"><body>{children}</body></html>}

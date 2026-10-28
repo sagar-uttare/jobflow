@@ -1,0 +1,5 @@
+export async function redis(...args:(string|number)[]):Promise<any>{const url=process.env.UPSTASH_REDIS_REST_URL,token=process.env.UPSTASH_REDIS_REST_TOKEN;if(!url||!token)throw Error('Redis is required');const r=await fetch(url,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify(args),signal:AbortSignal.timeout(8000),cache:'no-store'});if(!r.ok)throw Error(`Redis HTTP ${r.status}`);const data=await r.json();if(data.error)throw Error(`Redis: ${data.error}`);return data.result;}
+export async function get<T>(key:string):Promise<T|null>{const v=await redis('GET',key);return v?JSON.parse(v):null;}
+export async function set(key:string,v:unknown){await redis('SET',key,JSON.stringify(v));}
+export async function lock(key:string,token:string,seconds=180){return (await redis('SET',key,token,'NX','EX',seconds))==='OK';}
+export async function unlock(key:string,token:string){await redis('EVAL',"if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end",1,key,token);}

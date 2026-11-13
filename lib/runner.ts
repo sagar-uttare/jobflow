@@ -8,8 +8,18 @@ const key=(p:Pipeline)=>`jobbot:v1:pending:${p.name}`;
 async function record(p:Pipeline,level:string,message:string){await redis('LPUSH',`jobbot:v1:history:${p.name}`,JSON.stringify({time:new Date().toISOString(),level,message}));await redis('LTRIM',`jobbot:v1:history:${p.name}`,0,29);}
 async function prepare(image:Image){
  const result=await extract(image);let text=cleanJobFormat(result.text),warning='';
-   const website=websiteFromEmail(text);if(website){if(/^🌐 Website:/m.test(text))text=text.replace(/^🌐 Website:[^\n]*/m,`🌐 Website: ${website}`);else text+=`\n\n🌐 Website: ${website}`;}
-   try{const found=await lookup(result.recruiter,result.company,result.recruiterTitle,website||'');if(found.hr){if(/🔗\s*LinkedIn:/i.test(text))text=text.replace(/(🔗[ \t]*LinkedIn:)[ \t]*[^\n]*/i,`$1 ${found.hr}`);else text+=`\n🔗 LinkedIn: ${found.hr}`;}if(found.company){const line=`🏢 Company LinkedIn: ${found.company}`;if(/^🏢 Company LinkedIn:.*$/m.test(text))text=text.replace(/^🏢 Company LinkedIn:.*$/m,line);else {const lines=text.split('\n');const at=lines.findIndex(x=>/^🔗\s*LinkedIn:/i.test(x));if(at>=0)lines.splice(at+1,0,line);else lines.push(line);text=lines.join('\n');}}const missing=[result.recruiter&&!found.hr?'HR':null,result.company&&!found.company?'company':null].filter(Boolean);warning=missing.length?`Tavily could not verify ${missing.join(' and ')} LinkedIn URL; left blank.`:found.hr||found.company?'LinkedIn matches found; verify profiles before posting.':'';}catch{warning='Tavily lookup failed; LinkedIn URLs left blank.'}
+ const website=websiteFromEmail(text);
+ if(website){if(/^🌐 Website:/m.test(text))text=text.replace(/^🌐 Website:[^\n]*/m,`🌐 Website: ${website}`);else text+=`\n\n🌐 Website: ${website}`;}
+ let companyType:'staffing'|'consulting'|'both'|null=null;
+ try{
+  const found=await lookup(result.recruiter,result.company,result.recruiterTitle,website||'');companyType=found.companyType;
+  if(found.hr){if(/🔗\s*LinkedIn:/i.test(text))text=text.replace(/(🔗[ \t]*LinkedIn:)[ \t]*[^\n]*/i,`$1 ${found.hr}`);else text+=`\n🔗 LinkedIn: ${found.hr}`;}
+  if(found.company){const line=`🏢 Company LinkedIn: ${found.company}`;if(/^🏢 Company LinkedIn:.*$/m.test(text))text=text.replace(/^🏢 Company LinkedIn:.*$/m,line);else {const lines=text.split('\n');const at=lines.findIndex(x=>/^🔗\s*LinkedIn:/i.test(x));if(at>=0)lines.splice(at+1,0,line);else lines.push(line);text=lines.join('\n');}}
+  const missing=[result.recruiter&&!found.hr?'HR':null,result.company&&!found.company?'company':null].filter(Boolean);
+  warning=missing.length?`Tavily could not verify ${missing.join(' and ')} LinkedIn URL; left blank.`:found.hr||found.company?'LinkedIn matches found; verify profiles before posting.':'';
+ }catch{warning='Tavily lookup failed; LinkedIn URLs left blank.'}
+ const tip=companyType==='staffing'?'💡 Tip: Company profile indicates staffing/recruitment — confirm the end client and payroll employer.':companyType==='consulting'?'💡 Tip: Company profile indicates consulting — confirm this role is internal or client-based.':companyType==='both'?'💡 Tip: Company profile indicates consulting + recruitment — confirm the end client and payroll employer.':'💡 Tip: Company type not confirmed — ask whether this is a direct or client-based role.';
+ const lines=text.split('\n');const keySkillsAt=lines.findIndex(x=>/^🛠️?\s*Key Skills:/i.test(x));const hrAt=lines.findIndex(x=>/^👤\s*Recruiter/i.test(x));let insertAt=keySkillsAt>=0?keySkillsAt:hrAt>=0?hrAt:lines.length;while(insertAt>0&&lines[insertAt-1].trim()===''){lines.splice(insertAt-1,1);insertAt--;}if(insertAt>0){if(keySkillsAt>=0)lines.splice(insertAt,0,'',tip,'');else lines.splice(insertAt,0,'',tip);}else if(keySkillsAt>=0)lines.splice(insertAt,0,tip,'');else lines.splice(insertAt,0,tip);text=lines.join('\n');
  return {text,warning};
 }
 export async function run(p:Pipeline,dry=false){

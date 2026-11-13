@@ -10,11 +10,12 @@ export async function extract(file:Image):Promise<{text:string;recruiter:string;
 const r=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{authorization:`Bearer ${process.env.OPENAI_API_KEY}`,'content-type':'application/json'},body:JSON.stringify({model:process.env.OPENAI_MODEL||'gpt-4o-mini',temperature:0,response_format:{type:'json_object'},messages:[{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url:`data:${mime};base64,${bytes.toString('base64')}`,detail:'high'}}]}],max_tokens:3000}),signal:AbortSignal.timeout(35000)});const j=await json(r,'OpenAI');let data;try{data=JSON.parse(j.choices?.[0]?.message?.content)}catch{throw Error('OpenAI response was not valid JSON')};if(data.isJob!==true)throw Error('Image not confidently identified as a job; retained for review');
 const val=(x:unknown,max=180)=>typeof x==='string'?x.replace(/[\r\n]+/g,' ').replace(/\*\*/g,'').trim().slice(0,max):'';
 const arr=(x:unknown)=>Array.isArray(x)?x.map(v=>val(v,120)).filter(Boolean).slice(0,20):[];
+const personName=(s:string)=>s.replace(/^(?:HR|Human Resources|Recruiter|Recruitment|Talent Acquisition|Hiring Manager)\s*[-:|]?\s+/i,'').trim();
 const roles=arr(data.roles),skills=arr(data.skills);if(!roles.length)throw Error('No job roles could be read from the image; image retained for review');
-const email=val(data.email),jobBodyText=val(data.jobBodyText,6000),companyCandidate=val(data.company),companyEvidence=val(data.companyEvidence,300),recruiterCandidate=val(data.recruiter),recruiterEvidence=val(data.recruiterEvidence,240),uploaderCandidate=val(data.uploaderName),uploaderEvidence=val(data.uploaderEvidence,240),uploaderTitleCandidate=val(data.uploaderTitle),uploaderTitleEvidence=val(data.uploaderTitleEvidence,240);const norm=(s:string)=>` ${s.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()} `;const companyContext=/(?:\bcompany\b|\bemployer\b|\bclient\b|\bhiring\b|\bhired\b|\bopportunity\b|\brole\b|\bposition\b|\bjoin\b|\bat\b|\bfor\b)/i.test(companyEvidence);const explicitCompany=companyCandidate&&companyEvidence&&companyContext&&norm(companyEvidence).includes(norm(companyCandidate))?companyCandidate:'';const company=explicitCompany||companyFromEmail(email)||'';const explicitRecruiter=recruiterCandidate&&/(?:recruiter|recruitment|talent acquisition|human resources|\bhr\b)/i.test(recruiterEvidence)&&norm(recruiterEvidence).includes(norm(recruiterCandidate))?recruiterCandidate:'';const uploader=uploaderCandidate&&uploaderEvidence&&norm(uploaderEvidence).includes(norm(uploaderCandidate))?uploaderCandidate:'';const recruiter=explicitRecruiter||uploader;const uploaderTitle=uploaderTitleCandidate&&uploaderTitleEvidence&&norm(uploaderTitleEvidence).includes(norm(uploaderTitleCandidate))?uploaderTitleCandidate:'';const workModeEvidence=val(data.workModeEvidence,240),workModeCandidate=val(data.workMode),workMode=workModeCandidate&&/(?:remote|hybrid|office|on[ -]?site|work from home|wfh)/i.test(workModeEvidence)?workModeCandidate:'';const preferenceEvidence=val(data.preferenceEvidence,240),preferenceCandidate=val(data.preference),preference=preferenceCandidate&&preferenceEvidence?preferenceCandidate:'';const urgentEvidence=val(data.urgentEvidence,240),urgent=data.urgent===true&&/\b(?:urgent|immediate|immediately|asap)\b/i.test(urgentEvidence);const vacancyCountEvidence=val(data.vacancyCountEvidence,240),rawVacancyCount=Number(data.vacancyCount),countWords:Record<number,string>={2:'two',3:'three',4:'four',5:'five',6:'six',7:'seven',8:'eight',9:'nine',10:'ten'};const countQuoteVerified=!!vacancyCountEvidence&&!!jobBodyText&&norm(jobBodyText).includes(norm(vacancyCountEvidence));const countPattern=rawVacancyCount===1?/\b(?:1|one)\s+(?:openings?|positions?|vacancies?|roles?)\b/i:new RegExp(`\\b(?:${rawVacancyCount}|${countWords[rawVacancyCount]||'__'})\\s+(?:openings?|positions?|vacancies?|roles?)\\b`,'i');const countSupported=countQuoteVerified&&Number.isInteger(rawVacancyCount)&&rawVacancyCount>0&&countPattern.test(vacancyCountEvidence);const vacancyCount=countSupported?rawVacancyCount:0;const lines:string[]=[];
+const email=val(data.email),jobBodyText=val(data.jobBodyText,6000),companyCandidate=val(data.company),companyEvidence=val(data.companyEvidence,300),recruiterCandidate=personName(val(data.recruiter)),recruiterEvidence=val(data.recruiterEvidence,240),uploaderCandidate=personName(val(data.uploaderName)),uploaderEvidence=val(data.uploaderEvidence,240),uploaderTitleCandidate=val(data.uploaderTitle),uploaderTitleEvidence=val(data.uploaderTitleEvidence,240);const norm=(s:string)=>` ${s.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()} `;const companyContext=/(?:\bcompany\b|\bemployer\b|\bclient\b|\bhiring\b|\bhired\b|\bopportunity\b|\brole\b|\bposition\b|\bjoin\b|\bat\b|\bfor\b)/i.test(companyEvidence);const explicitCompany=companyCandidate&&companyEvidence&&companyContext&&norm(companyEvidence).includes(norm(companyCandidate))?companyCandidate:'';const company=explicitCompany||companyFromEmail(email)||'';const explicitRecruiter=recruiterCandidate&&/(?:recruiter|recruitment|talent acquisition|human resources|\bhr\b)/i.test(recruiterEvidence)&&norm(recruiterEvidence).includes(norm(recruiterCandidate))?recruiterCandidate:'';const uploader=uploaderCandidate&&uploaderEvidence&&norm(uploaderEvidence).includes(norm(uploaderCandidate))?uploaderCandidate:'';const recruiter=explicitRecruiter||uploader;const uploaderTitle=uploaderTitleCandidate&&uploaderTitleEvidence&&norm(uploaderTitleEvidence).includes(norm(uploaderTitleCandidate))?uploaderTitleCandidate:'';const workModeEvidence=val(data.workModeEvidence,240),workModeCandidate=val(data.workMode),workMode=workModeCandidate&&/(?:remote|hybrid|office|on[ -]?site|work from home|wfh)/i.test(workModeEvidence)?workModeCandidate:'';const preferenceEvidence=val(data.preferenceEvidence,240),preferenceCandidate=val(data.preference),preference=preferenceCandidate&&preferenceEvidence?preferenceCandidate:'';const urgentEvidence=val(data.urgentEvidence,240),urgent=data.urgent===true&&/\b(?:urgent|immediate|immediately|asap)\b/i.test(urgentEvidence);const vacancyCountEvidence=val(data.vacancyCountEvidence,240),rawVacancyCount=Number(data.vacancyCount),countWords:Record<number,string>={2:'two',3:'three',4:'four',5:'five',6:'six',7:'seven',8:'eight',9:'nine',10:'ten'};const countQuoteVerified=!!vacancyCountEvidence&&!!jobBodyText&&norm(jobBodyText).includes(norm(vacancyCountEvidence));const countPattern=rawVacancyCount===1?/\b(?:1|one)\s+(?:openings?|positions?|vacancies?|roles?)\b/i:new RegExp(`\\b(?:${rawVacancyCount}|${countWords[rawVacancyCount]||'__'})\\s+(?:openings?|positions?|vacancies?|roles?)\\b`,'i');const countSupported=countQuoteVerified&&Number.isInteger(rawVacancyCount)&&rawVacancyCount>0&&countPattern.test(vacancyCountEvidence);const vacancyCount=countSupported?rawVacancyCount:0;const lines:string[]=[];
 const roleHeadline=roles.length===1?roles[0]:'Multiple Roles';const hiringPrefix=urgent?'🔥 Urgent Hiring:':'🚀 Hiring:';const hiringSuffix=roles.length>1?' Available!':'!';lines.push(`${hiringPrefix} ${roleHeadline}${hiringSuffix}`,'');
 if(company)lines.push(`🏢 Company: ${company}`);
-if(roles.length)lines.push('','💼 Roles:',...roles.map((role,i)=>roles.length>1?`${i+1}. ${role}`:`- ${role}`));if(vacancyCount)lines.push(`👥 Openings: ${vacancyCount}`);
+if(roles.length){if(!company&&lines[lines.length-1]!=='')lines.push('');if(roles.length===1)lines.push(`💼 Role: ${roles[0]}`);else lines.push('💼 Roles:',...roles.map((role,i)=>`${i+1}. ${role}`));}if(vacancyCount)lines.push(`👥 Openings: ${vacancyCount}`);
 for(const [label,value] of [['📍 Location',val(data.location)],['⭐ Experience',val(data.experience)],['💼 Employment',val(data.employment)]] as const)if(value)lines.push(`${label}: ${value}`);if(workMode)lines.push(`🏢 Work Mode: ${workMode}`);if(preference)lines.push(`🎯 Preference: ${preference}`);
 if(skills.length)lines.push('','🛠️ Key Skills:',...skills.map(x=>`- ${x}`));
 lines.push('','👤 Recruiter / HR Details:',`⭐ HR Name: ${recruiter}`,`📩 Email: ${email}`,`🔗 LinkedIn: `);
@@ -28,7 +29,7 @@ export function cleanJobFormat(text:string):string {
  let section:'roles'|'skills'|null=null;const out:string[]=[];
  for(const raw of text.split('\n')){
   let line=raw.trim().replace(/\*\*/g,'');if(!line){if(out.length && out[out.length-1]!=='')out.push('');continue;}
-  if(allowed.test(line)){section=/^💼\s*(?:Open Positions|Roles):/i.test(line)?'roles':/^🛠️?\s*Key Skills:/i.test(line)?'skills':null;out.push(line);continue;}
+  if(allowed.test(line)){section=/^💼\s*(?:Open Positions|Roles|Role):/i.test(line)?'roles':/^🛠️?\s*Key Skills:/i.test(line)?'skills':null;out.push(line);continue;}
   if(section==='skills'&&/^[-•]\s+\S/.test(line)&&line.length<=140){out.push(line.replace(/^•/,'-'));continue;}
   if(section==='roles'&&/^(?:[-•]\s+|\d+[.)]\s*)\S/.test(line)&&line.length<=180){out.push(line.replace(/^•/,'-'));continue;}
   // Unknown heading/prose ends any preceding list and is discarded.
@@ -57,7 +58,7 @@ export function websiteFromEmail(text:string):string|null {
  const domain=email?corporateEmailDomain(email):null;
  return domain?`www.${domain}`:null;
 }
-export async function lookup(recruiter:string,company:string,recruiterTitle='',website=''):Promise<{hr:string|null;company:string|null}>{
+export async function lookup(recruiter:string,company:string,recruiterTitle='',website=''):Promise<{hr:string|null;company:string|null;companyType:'staffing'|'consulting'|'both'|null}>{
  const keys=[process.env.TAVILY_API_KEY,process.env.TAVILY_API_KEY_2,process.env.TAVILY_API_KEY_3].filter((k):k is string=>!!k);
  if(!keys.length)throw Error('No Tavily key configured');
  const cursorKey='jobbot:v1:tavily-key-index';
@@ -98,21 +99,34 @@ export async function lookup(recruiter:string,company:string,recruiterTitle='',w
   }
   const ranked=[...candidates.values()].sort((a,b)=>b.score-a.score);if(!ranked.length)return null;if(ranked.length>1&&ranked[0].score===ranked[1].score&&ranked[0].score<125)return null;return ranked[0].url;
  }
- async function findCompany():Promise<string|null>{
+ type CompanyType='staffing'|'consulting'|'both';
+ function classifyCompany(text:string):CompanyType|null {
+  const staffing=/(?:\bstaffing\b.{0,35}\b(?:recruiting|recruitment)\b|\b(?:recruiting|recruitment)\b.{0,35}\bstaffing\b|\brecruitment agency\b|\bstaffing agency\b|\bmanpower services\b|\btalent sourcing company\b|\brecruitment services\b|\brecruitment process outsourcing\b|\bexecutive search\b|\bplacement services\b|\bemployment agency\b|\bRPO\b)/i.test(text);
+  const consulting=/(?:\bIT services and IT consulting\b|\bconsulting partner\b|\bconsulting firm\b|\bconsultancy\b|\bconsulting services\b|\btechnology consulting\b|\bprofessional services\b)/i.test(text);
+  return staffing&&consulting?'both':staffing?'staffing':consulting?'consulting':null;
+ }
+ async function findCompany():Promise<{url:string;type:CompanyType|null}|null>{
   if(!companyForms.length)return null;
   const queries=[
    [`site:linkedin.com/company`,...companyForms.map(x=>`"${x}"`),'official page'].join(' '),
    [`site:linkedin.com/company`,...companyForms.map(x=>`"${x}"`),'LinkedIn company'].join(' ')
   ];
-  const candidates=new Map<string,{url:string;score:number}>();
+  const candidates=new Map<string,{url:string;score:number;type:CompanyType|null}>();
   for(const query of [...new Set(queries)]){
    let results:{url?:string;title?:string;content?:string}[];try{results=await searchResults(query);}catch{continue;}
-   for(const result of results){const u=linkedinPath(result.url||'','company');if(!u)continue;const titleAndPath=`${result.title||''} ${u.pathname}`;if(!matchesCompany(titleAndPath))continue;let score=100;if(companyForms.some(form=>normalize(result.title||'').includes(normalize(form))))score+=10;const url=linkedinUrl(u);const prior=candidates.get(url);if(!prior||score>prior.score)candidates.set(url,{url,score});
+   for(const result of results){
+    const u=linkedinPath(result.url||'','company');if(!u)continue;
+    const titleAndPath=`${result.title||''} ${u.pathname}`;if(!matchesCompany(titleAndPath))continue;
+    let score=100;if(companyForms.some(form=>normalize(result.title||'').includes(normalize(form))))score+=10;
+    const url=linkedinUrl(u),type=classifyCompany(`${result.title||''} ${result.content||''}`),prior=candidates.get(url);
+    if(!prior||score>prior.score||(!prior.type&&!!type))candidates.set(url,{url,score,type});
    }
   }
-  const ranked=[...candidates.values()].sort((a,b)=>b.score-a.score);if(ranked.length>1&&ranked[0].score===ranked[1].score)return null;return ranked[0]?.url||null;
+  const ranked=[...candidates.values()].sort((a,b)=>b.score-a.score);
+  if(ranked.length>1&&ranked[0].score===ranked[1].score)return null;
+  return ranked[0]?{url:ranked[0].url,type:ranked[0].type}:null;
  }
  const [hr,co]=await Promise.allSettled([recruiter?findHr():Promise.resolve(null),company?findCompany():Promise.resolve(null)]);
- if(hr.status==='rejected'&&co.status==='rejected')throw Error('Tavily searches failed');return {hr:hr.status==='fulfilled'?hr.value:null,company:co.status==='fulfilled'?co.value:null};
+ if(hr.status==='rejected'&&co.status==='rejected')throw Error('Tavily searches failed');const companyMatch=co.status==='fulfilled'?co.value:null;return {hr:hr.status==='fulfilled'?hr.value:null,company:companyMatch?.url||null,companyType:companyMatch?.type||null};
 }
 export async function send(channel:string,text:string){if(text.length>3900)throw Error('Post exceeds safe Telegram message length; review required');const r=await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({chat_id:channel,text,link_preview_options:{is_disabled:true}}),signal:AbortSignal.timeout(15000)});const body=await r.text();let j;try{j=JSON.parse(body)}catch{throw Error('Telegram response uncertain; manual review required')};if(!r.ok||!j.ok)throw Error(`Telegram rejected: ${j.description||r.status}`);return j.result?.message_id;}
